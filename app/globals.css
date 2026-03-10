@@ -395,6 +395,21 @@ textarea {
   background: rgba(255, 255, 255, 0.5);
 }
 
+.code-block {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #10212a;
+  color: #d5e9f2;
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (max-width: 1120px) {
   .shell {
     grid-template-columns: 1fr;

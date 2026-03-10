@@ -5,8 +5,19 @@ import { requireRole } from "@/lib/auth";
 import { NextRequest } from "next/server";
 
 export async function POST(req: NextRequest) {
-  const auth = requireRole(req, ["ADMIN", "MANAGER", "AGENT"]);
-  if (!auth.ok) return auth.response;
+  const ingestToken = process.env.LEAD_INGEST_TOKEN;
+  const requestToken = req.headers.get("x-ingest-token");
+  let actorUserId: string | undefined;
+
+  if (ingestToken && requestToken && requestToken !== ingestToken) {
+    return Response.json({ error: "invalid ingest token" }, { status: 401 });
+  }
+
+  if (!(ingestToken && requestToken === ingestToken)) {
+    const auth = requireRole(req, ["ADMIN", "MANAGER", "AGENT"]);
+    if (!auth.ok) return auth.response;
+    actorUserId = auth.userId;
+  }
 
   const body = await req.json();
   const normalizedEmail = normalizeEmail(body.email);
@@ -42,6 +53,6 @@ export async function POST(req: NextRequest) {
     await enqueueSequenceRun(run.id, 1, 5);
   }
 
-  await prisma.leadActivity.create({ data: { leadId: lead.id, actorUserId: auth.userId, activityType: "lead_ingested", payload: body } });
+  await prisma.leadActivity.create({ data: { leadId: lead.id, actorUserId, activityType: "lead_ingested", payload: body } });
   return Response.json({ lead });
 }

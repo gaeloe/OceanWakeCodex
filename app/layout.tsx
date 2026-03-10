@@ -7,6 +7,7 @@ const navItems = [
   { href: "/leads", label: "Leads" },
   { href: "/templates", label: "Templates" },
   { href: "/audit-log", label: "Audit Log" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export default function RootLayout({ children }: { children: ReactNode }) {
