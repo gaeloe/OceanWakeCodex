@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  AGENT
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  REPLIED
+  CLOSED
+}
+
+enum SequenceRunStatus {
+  ACTIVE
+  PAUSED
+  STOPPED
+  COMPLETED
+}
+
+enum MessageDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum MessageEventType {
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  SPAM_REPORT
+  UNSUBSCRIBED
+  DROPPED
+  REPLIED
+}
+
+enum SuppressionReason {
+  UNSUBSCRIBE
+  SPAM_REPORT
+  HARD_BOUNCE
+  MANUAL
+}
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  name       String
+  role       UserRole @default(AGENT)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  leads      Lead[]   @relation("LeadAssignedAgent")
+  activities LeadActivity[]
+}
+
+model Lead {
+  id              String            @id @default(cuid())
+  email           String
+  normalizedEmail String            @unique
+  firstName       String?
+  lastName        String?
+  source          String?
+  status          LeadStatus        @default(NEW)
+  assignedAgentId String?
+  assignedAgent   User?             @relation("LeadAssignedAgent", fields: [assignedAgentId], references: [id])
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  conversations   Conversation[]
+  sequenceRuns    SequenceRun[]
+  messages        Message[]
+  suppressions    Suppression[]
+  activities      LeadActivity[]
+}
+
+model Conversation {
+  id          String    @id @default(cuid())
+  leadId      String
+  lead        Lead      @relation(fields: [leadId], references: [id])
+  subject     String
+  threadToken String    @unique
+  isOpen      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  messages    Message[]
+}
+
+model SequenceDefinition {
+  id        String         @id @default(cuid())
+  name      String
+  active    Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  steps     SequenceStep[]
+  runs      SequenceRun[]
+}
+
+model SequenceStep {
+  id                   String             @id @default(cuid())
+  sequenceDefinitionId String
+  sequenceDefinition   SequenceDefinition @relation(fields: [sequenceDefinitionId], references: [id])
+  stepOrder            Int
+  delayMinutes         Int
+  templateId           String
+  template             Template           @relation(fields: [templateId], references: [id])
+
+  @@unique([sequenceDefinitionId, stepOrder])
+}
+
+model SequenceRun {
+  id                   String             @id @default(cuid())
+  leadId               String
+  lead                 Lead               @relation(fields: [leadId], references: [id])
+  sequenceDefinitionId String
+  sequenceDefinition   SequenceDefinition @relation(fields: [sequenceDefinitionId], references: [id])
+  status               SequenceRunStatus  @default(ACTIVE)
+  currentStepOrder     Int                @default(1)
+  startedAt            DateTime           @default(now())
+  stoppedAt            DateTime?
+  stopReason           String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([leadId, status])
+}
+
+model Template {
+  id        String         @id @default(cuid())
+  name      String
+  subject   String
+  bodyHtml  String
+  bodyText  String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  steps     SequenceStep[]
+}
+
+model Message {
+  id             String           @id @default(cuid())
+  leadId         String
+  lead           Lead             @relation(fields: [leadId], references: [id])
+  conversationId String?
+  conversation   Conversation?    @relation(fields: [conversationId], references: [id])
+  direction      MessageDirection
+  provider       String
+  providerMsgId  String?
+  fromEmail      String
+  toEmail        String
+  subject        String
+  bodyText       String
+  bodyHtml       String?
+  sentAt         DateTime?
+  receivedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  events         MessageEvent[]
+
+  @@index([providerMsgId])
+}
+
+model MessageEvent {
+  id            String           @id @default(cuid())
+  messageId     String
+  message       Message          @relation(fields: [messageId], references: [id])
+  eventType     MessageEventType
+  occurredAt    DateTime
+  raw           Json
+  webhookHash   String
+  createdAt     DateTime         @default(now())
+
+  @@unique([webhookHash, eventType])
+}
+
+model Suppression {
+  id         String            @id @default(cuid())
+  leadId      String
+  lead        Lead              @relation(fields: [leadId], references: [id])
+  reason      SuppressionReason
+  createdAt   DateTime          @default(now())
+  expiresAt   DateTime?
+  isActive    Boolean           @default(true)
+
+  @@index([leadId, isActive])
+}
+
+model WebhookReceipt {
+  id           String   @id @default(cuid())
+  provider     String
+  eventType    String
+  idempotencyKey String @unique
+  rawBody      String
+  createdAt    DateTime @default(now())
+}
+
+model LeadActivity {
+  id          String   @id @default(cuid())
+  leadId       String
+  lead         Lead     @relation(fields: [leadId], references: [id])
+  actorUserId  String?
+  actorUser    User?    @relation(fields: [actorUserId], references: [id])
+  activityType String
+  payload      Json
+  createdAt    DateTime @default(now())
+
+  @@index([leadId, createdAt])
+}
