@@ -57,10 +57,26 @@ export default async function LeadsPage({
       </section>
 
       <section className="panel pad">
+        <div className="toolbar">
+          <div>
+            <h2 className="section-title">Bulk actions</h2>
+            <p className="section-copy">Keep fast actions visible even before the full bulk workflow lands.</p>
+          </div>
+          <div className="button-row">
+            <button className="button secondary" type="button">Pause selected</button>
+            <button className="button secondary" type="button">Resume selected</button>
+            <button className="button secondary" type="button">Tag selected</button>
+            <button className="button secondary" type="button">Export CSV</button>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel pad">
         <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
+                <th>Select</th>
                 <th>Lead</th>
                 <th>Status</th>
                 <th>Sequence</th>
@@ -76,6 +92,7 @@ export default async function LeadsPage({
 
                 return (
                   <tr key={lead.id}>
+                    <td><input type="checkbox" aria-label={`Select ${lead.email}`} /></td>
                     <td>
                       <a href={`/leads/${lead.id}`}>
                         <strong>{lead.email}</strong>

@@ -410,6 +410,189 @@ textarea {
   word-break: break-word;
 }
 
+.mobile-nav {
+  display: none;
+}
+
+.queue-list {
+  display: grid;
+  gap: 16px;
+}
+
+.queue-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 18px;
+  align-items: center;
+}
+
+.queue-main {
+  display: grid;
+  gap: 10px;
+}
+
+.queue-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.queue-side {
+  display: grid;
+  gap: 10px;
+}
+
+.queue-empty {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.95fr);
+  gap: 20px;
+}
+
+.thread-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.context-chip {
+  display: none;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(0, 109, 119, 0.08);
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chat-thread {
+  display: grid;
+  gap: 12px;
+}
+
+.chat-bubble {
+  max-width: 82%;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: white;
+}
+
+.chat-bubble.outbound {
+  margin-left: auto;
+  background: #dff5fb;
+  border-color: rgba(2, 132, 199, 0.18);
+}
+
+.chat-bubble.inbound {
+  margin-right: auto;
+}
+
+.chat-bubble p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.chat-bubble-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.event-divider {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 0;
+}
+
+.composer-dock {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.template-palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.template-palette-item {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-strong);
+  padding: 12px 14px;
+}
+
+.template-palette-item summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.template-preview {
+  margin-top: 10px;
+  color: var(--muted);
+}
+
+.template-preview p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+.sticky-card {
+  position: sticky;
+  top: 20px;
+}
+
+.sequence-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.sequence-step {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.sequence-step-dot {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 109, 119, 0.12);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.sequence-step.current .sequence-step-dot {
+  background: rgba(180, 83, 9, 0.14);
+  color: var(--warning);
+}
+
+.sequence-step-content {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
 @media (max-width: 1120px) {
   .shell {
     grid-template-columns: 1fr;
@@ -422,7 +605,9 @@ textarea {
 
   .metrics,
   .grid-2,
-  .detail-grid {
+  .detail-grid,
+  .workspace-grid,
+  .queue-card {
     grid-template-columns: 1fr;
   }
 }
@@ -440,5 +625,54 @@ textarea {
 
   .form-grid.two {
     grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .shell {
+    padding-bottom: 80px;
+  }
+
+  .mobile-nav {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 10px;
+    border-radius: 20px;
+    background: rgba(8, 47, 73, 0.96);
+    box-shadow: var(--shadow);
+    z-index: 30;
+  }
+
+  .mobile-nav-link {
+    min-height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    color: white;
+    font-size: 13px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .queue-side {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .context-chip {
+    display: inline-flex;
+  }
+
+  .chat-bubble {
+    max-width: 94%;
+  }
+
+  .sticky-card {
+    position: static;
   }
 }

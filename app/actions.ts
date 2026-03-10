@@ -235,6 +235,21 @@ export async function deleteTemplateAction(formData: FormData) {
   redirect("/templates?deleted=1");
 }
 
+export async function snoozeLeadAction(formData: FormData) {
+  const leadId = textValue(formData, "leadId");
+  if (!leadId) return;
+
+  await prisma.leadActivity.create({
+    data: {
+      leadId,
+      activityType: "lead_snoozed_4h",
+      payload: { until: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString() },
+    },
+  });
+
+  revalidatePath("/queue");
+}
+
 export async function importLeadsAction(formData: FormData) {
   const sourceOverride = textValue(formData, "source");
   const rawRows = textValue(formData, "rows");

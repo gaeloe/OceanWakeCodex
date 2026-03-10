@@ -57,16 +57,30 @@ export const getTemplatesData = unstable_cache(
 
 export const getLeadDetailData = unstable_cache(
   async (leadId: string) => {
-    const [lead, agents] = await Promise.all([
+    const [lead, agents, templates] = await Promise.all([
       prisma.lead.findUnique({
         where: { id: leadId },
         include: {
           assignedAgent: true,
           activities: { orderBy: { createdAt: "desc" } },
-          messages: { orderBy: { createdAt: "desc" } },
+          messages: {
+            orderBy: { createdAt: "asc" },
+            include: {
+              events: { orderBy: { occurredAt: "asc" } },
+            },
+          },
           sequenceRuns: {
             orderBy: { createdAt: "desc" },
-            include: { sequenceDefinition: true },
+            include: {
+              sequenceDefinition: {
+                include: {
+                  steps: {
+                    orderBy: { stepOrder: "asc" },
+                    include: { template: true },
+                  },
+                },
+              },
+            },
           },
           suppressions: { orderBy: { createdAt: "desc" } },
         },
@@ -74,9 +88,13 @@ export const getLeadDetailData = unstable_cache(
       prisma.user.findMany({
         orderBy: { name: "asc" },
       }),
+      prisma.template.findMany({
+        orderBy: { updatedAt: "desc" },
+        take: 8,
+      }),
     ]);
 
-    return { lead, agents };
+    return { lead, agents, templates };
   },
   ["lead-detail-data"],
   { revalidate: 20 }
@@ -113,4 +131,29 @@ export const getLeadsPageData = unstable_cache(
     }),
   ["leads-page-data"],
   { revalidate: 15 }
+);
+
+export const getQueueData = unstable_cache(
+  async () =>
+    prisma.lead.findMany({
+      orderBy: { updatedAt: "desc" },
+      take: 40,
+      include: {
+        assignedAgent: true,
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 8,
+          include: { events: true },
+        },
+        sequenceRuns: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+        suppressions: {
+          where: { isActive: true },
+        },
+      },
+    }),
+  ["queue-data"],
+  { revalidate: 10 }
 );

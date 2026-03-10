@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 const navItems = [
+  { href: "/queue", label: "Queue" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/leads", label: "Leads" },
   { href: "/templates", label: "Templates" },
@@ -40,6 +41,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
           <main className="content">{children}</main>
         </div>
+        <nav className="mobile-nav" aria-label="Mobile">
+          {navItems.slice(0, 4).map((item) => (
+            <Link key={item.href} className="mobile-nav-link" href={item.href}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
       </body>
     </html>
   );
