@@ -7,12 +7,16 @@ import { getTemplatesData } from "@/lib/page-data";
 export default async function TemplatesPage({
   searchParams,
 }: {
-  searchParams?: { template?: string; generated?: string } | Promise<{ template?: string; generated?: string }>;
+  searchParams?:
+    | { template?: string; generated?: string; deleted?: string; deleteError?: string }
+    | Promise<{ template?: string; generated?: string; deleted?: string; deleteError?: string }>;
 }) {
   const resolved = await Promise.resolve(searchParams);
   const templates = await getTemplatesData();
   const selectedTemplate = templates.find((template) => template.id === resolved?.template) ?? templates[0] ?? null;
   const generated = resolved?.generated === "1";
+  const deleted = resolved?.deleted === "1";
+  const deleteError = resolved?.deleteError === "in_use";
 
   return (
     <>
@@ -90,6 +94,10 @@ export default async function TemplatesPage({
             <p className="section-copy">Default cadence remains immediate, +1d, +3d, +7d, +14d.</p>
 
             {generated ? <div className="empty">New draft created. Review it below and adjust if needed.</div> : null}
+            {deleted ? <div className="empty">Template deleted.</div> : null}
+            {deleteError ? (
+              <div className="empty">This template is still used by a sequence step. Assign a different template first.</div>
+            ) : null}
 
             <form action={saveTemplateAction} className="form-grid">
               <input type="hidden" name="templateId" value={selectedTemplate?.id ?? ""} />

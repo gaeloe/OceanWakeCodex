@@ -222,8 +222,17 @@ export async function deleteTemplateAction(formData: FormData) {
   const templateId = textValue(formData, "templateId");
   if (!templateId) return;
 
+  const linkedSteps = await prisma.sequenceStep.count({
+    where: { templateId },
+  });
+
+  if (linkedSteps > 0) {
+    redirect(`/templates?template=${templateId}&deleteError=in_use`);
+  }
+
   await prisma.template.delete({ where: { id: templateId } });
   revalidatePath("/templates");
+  redirect("/templates?deleted=1");
 }
 
 export async function importLeadsAction(formData: FormData) {
