@@ -1,22 +1,142 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { prisma } from "@/lib/db";
 
-export default async function LeadsPage() {
-  const leads = await prisma.lead.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
+type SearchParams = {
+  q?: string;
+  status?: string;
+};
+
+const statusOptions = ["ALL", "NEW", "CONTACTED", "REPLIED", "CLOSED"] as const;
+
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams?: SearchParams | Promise<SearchParams>;
+}) {
+  const resolved = await Promise.resolve(searchParams);
+  const query = resolved?.q?.trim() ?? "";
+  const status = resolved?.status?.trim() ?? "ALL";
+
+  const leads = await prisma.lead.findMany({
+    where: {
+      ...(query
+        ? {
+            OR: [
+              { email: { contains: query, mode: "insensitive" } },
+              { firstName: { contains: query, mode: "insensitive" } },
+              { lastName: { contains: query, mode: "insensitive" } },
+              { source: { contains: query, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+      ...(status !== "ALL" ? { status: status as "NEW" | "CONTACTED" | "REPLIED" | "CLOSED" } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: {
+      assignedAgent: true,
+      sequenceRuns: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+      suppressions: {
+        where: { isActive: true },
+      },
+    },
+  });
 
   return (
-    <div>
-      <h2>Leads</h2>
-      <table>
-        <thead><tr><th>Email</th><th>Status</th><th>Agent</th><th>Opened</th></tr></thead>
-        <tbody>
-          {leads.map((lead) => (
-            <tr key={lead.id}>
-              <td>{lead.email}</td><td>{lead.status}</td><td>{lead.assignedAgentId ?? "-"}</td>
-              <td><a href={`/leads/${lead.id}`}>Open</a></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <section className="panel hero">
+        <div>
+          <p className="brand-eyebrow" style={{ color: "var(--accent)" }}>
+            Lead Inbox
+          </p>
+          <h1>Leads</h1>
+          <p className="section-copy">Search, triage, and open the full lead history from a single queue.</p>
+        </div>
+        <div className="pill">{leads.length} visible</div>
+      </section>
+
+      <section className="panel pad">
+        <div className="toolbar">
+          <div>
+            <h2 className="section-title">Filter queue</h2>
+            <p className="section-copy">Use lightweight filters instead of paging through raw records.</p>
+          </div>
+          <form action="/leads" method="get">
+            <input className="input" type="search" name="q" defaultValue={query} placeholder="Search email, name, source" />
+            <select className="select" name="status" defaultValue={status}>
+              {statusOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === "ALL" ? "All statuses" : option}
+                </option>
+              ))}
+            </select>
+            <button className="button" type="submit">
+              Apply
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section className="panel pad">
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Lead</th>
+                <th>Status</th>
+                <th>Sequence</th>
+                <th>Assigned</th>
+                <th>Source</th>
+                <th>Opened</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leads.map((lead) => {
+                const latestRun = lead.sequenceRuns[0];
+                const activeSuppression = lead.suppressions[0];
+
+                return (
+                  <tr key={lead.id}>
+                    <td>
+                      <a href={`/leads/${lead.id}`}>
+                        <strong>{lead.email}</strong>
+                      </a>
+                      <div className="muted">
+                        {[lead.firstName, lead.lastName].filter(Boolean).join(" ") || "No contact name"}
+                      </div>
+                    </td>
+                    <td>
+                      <span className="pill">{lead.status}</span>
+                      {activeSuppression ? (
+                        <div style={{ marginTop: 8 }}>
+                          <span className="pill danger">{activeSuppression.reason}</span>
+                        </div>
+                      ) : null}
+                    </td>
+                    <td>
+                      {latestRun ? <span className="pill success">{latestRun.status}</span> : <span className="muted">No run</span>}
+                    </td>
+                    <td>{lead.assignedAgent?.name ?? lead.assignedAgent?.email ?? "Unassigned"}</td>
+                    <td>{lead.source ?? "Unknown"}</td>
+                    <td>
+                      <a className="button secondary" href={`/leads/${lead.id}`}>
+                        Open
+                      </a>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {!leads.length ? <div className="empty">No leads matched the current filters.</div> : null}
+      </section>
+    </>
   );
 }

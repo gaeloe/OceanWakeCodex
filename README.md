@@ -40,7 +40,7 @@ Internal lead-response app for Phuket real estate agency.
 
 ## Environment
 - `DATABASE_URL`
-- `REDIS_URL`
+- `REDIS_URL` (optional in Phase 1; only required when `ENABLE_REDIS=true`)
 - `SENDGRID_API_KEY`
 - `SENDGRID_EVENTS_TOKEN`
 - `SENDGRID_INBOUND_TOKEN`
@@ -49,8 +49,9 @@ Internal lead-response app for Phuket real estate agency.
 - `UNSUBSCRIBE_SECRET`
 - `APP_BASE_URL`
 - `ENABLE_QUEUE_WORKER`
+- `ENABLE_REDIS` (`true` to enable BullMQ/Redis; default disabled)
 
 
 ## Vercel
 - This repository is a **Next.js** app (see `vercel.json`) and should be deployed with the Next.js framework preset.
-- Ensure production env vars are configured in Vercel before first deploy, especially `DATABASE_URL` and `REDIS_URL`.
+- Ensure production env vars are configured in Vercel before first deploy, especially `DATABASE_URL` (Redis is optional unless `ENABLE_REDIS=true`).

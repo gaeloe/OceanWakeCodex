@@ -1,11 +1,16 @@
 import { prisma } from "./db";
 import { sendEmail } from "./email";
-import { sequenceQueue } from "./queue";
+import { getSequenceQueue } from "./queue";
 
 const MINUTE = 60 * 1000;
 
 export async function enqueueSequenceRun(sequenceRunId: string, stepOrder: number, delayMinutes: number) {
-  await sequenceQueue.add(
+  const queue = getSequenceQueue();
+  if (!queue) {
+    return;
+  }
+
+  await queue.add(
     `sequence-run-${sequenceRunId}-step-${stepOrder}`,
     { sequenceRunId, stepOrder },
     { delay: delayMinutes * MINUTE, jobId: `${sequenceRunId}-${stepOrder}` },

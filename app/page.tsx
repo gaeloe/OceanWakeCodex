@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 export default function Home() {
-  return <p>Use the navigation to manage leads and sequences.</p>;
+  redirect("/dashboard");
 }

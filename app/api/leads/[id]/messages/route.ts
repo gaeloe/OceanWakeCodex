@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, context: { params: { id: string } | Promise<{ id: string }> }) {
+  const resolved = await Promise.resolve(context.params);
   const body = await req.json();
-  const lead = await prisma.lead.findUnique({ where: { id: params.id }, include: { conversations: true } });
+  const lead = await prisma.lead.findUnique({ where: { id: resolved.id }, include: { conversations: true } });
   if (!lead) return Response.json({ error: "not found" }, { status: 404 });
 
   const conversation = lead.conversations[0] ?? (await prisma.conversation.create({
