@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 15;
 
-import { prisma } from "@/lib/db";
+import { getLeadsPageData } from "@/lib/page-data";
 
 type SearchParams = {
   q?: string;
@@ -19,33 +19,7 @@ export default async function LeadsPage({
   const query = resolved?.q?.trim() ?? "";
   const status = resolved?.status?.trim() ?? "ALL";
 
-  const leads = await prisma.lead.findMany({
-    where: {
-      ...(query
-        ? {
-            OR: [
-              { email: { contains: query, mode: "insensitive" } },
-              { firstName: { contains: query, mode: "insensitive" } },
-              { lastName: { contains: query, mode: "insensitive" } },
-              { source: { contains: query, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-      ...(status !== "ALL" ? { status: status as "NEW" | "CONTACTED" | "REPLIED" | "CLOSED" } : {}),
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    include: {
-      assignedAgent: true,
-      sequenceRuns: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-      suppressions: {
-        where: { isActive: true },
-      },
-    },
-  });
+  const leads = await getLeadsPageData(query, status);
 
   return (
     <>

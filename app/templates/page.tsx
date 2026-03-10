@@ -1,8 +1,8 @@
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 60;
 
 import { deleteTemplateAction, generateTemplateAction, saveTemplateAction } from "@/app/actions";
-import { prisma } from "@/lib/db";
+import { getTemplatesData } from "@/lib/page-data";
 
 export default async function TemplatesPage({
   searchParams,
@@ -10,7 +10,7 @@ export default async function TemplatesPage({
   searchParams?: { template?: string; generated?: string } | Promise<{ template?: string; generated?: string }>;
 }) {
   const resolved = await Promise.resolve(searchParams);
-  const templates = await prisma.template.findMany({ orderBy: { updatedAt: "desc" } });
+  const templates = await getTemplatesData();
   const selectedTemplate = templates.find((template) => template.id === resolved?.template) ?? templates[0] ?? null;
   const generated = resolved?.generated === "1";
 

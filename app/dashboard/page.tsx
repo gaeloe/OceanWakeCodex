@@ -1,29 +1,11 @@
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 30;
 
-import { prisma } from "@/lib/db";
+import { getDashboardData } from "@/lib/page-data";
 
 export default async function DashboardPage() {
-  const [totalLeads, replied, unsubscribed, bounced, spam, activeSequences, pausedSequences, recentLeads, recentActivity] =
-    await Promise.all([
-      prisma.lead.count(),
-      prisma.lead.count({ where: { status: "REPLIED" } }),
-      prisma.suppression.count({ where: { reason: "UNSUBSCRIBE", isActive: true } }),
-      prisma.suppression.count({ where: { reason: "HARD_BOUNCE", isActive: true } }),
-      prisma.suppression.count({ where: { reason: "SPAM_REPORT", isActive: true } }),
-      prisma.sequenceRun.count({ where: { status: "ACTIVE" } }),
-      prisma.sequenceRun.count({ where: { status: "PAUSED" } }),
-      prisma.lead.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 6,
-        include: { assignedAgent: true },
-      }),
-      prisma.leadActivity.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 8,
-        include: { lead: true, actorUser: true },
-      }),
-    ]);
+  const { totalLeads, replied, unsubscribed, bounced, spam, activeSequences, pausedSequences, recentLeads, recentActivity } =
+    await getDashboardData();
 
   const replyRate = totalLeads ? (replied / totalLeads) * 100 : 0;
   const unsubscribeRate = totalLeads ? (unsubscribed / totalLeads) * 100 : 0;

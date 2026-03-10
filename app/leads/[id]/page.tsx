@@ -1,30 +1,13 @@
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 20;
 
 import { notFound } from "next/navigation";
 import { assignLeadAction, sendLeadMessageAction, updateSequenceStatusAction } from "@/app/actions";
-import { prisma } from "@/lib/db";
+import { getLeadDetailData } from "@/lib/page-data";
 
 export default async function LeadDetailPage(context: { params: { id: string } | Promise<{ id: string }> }) {
   const resolved = await Promise.resolve(context.params);
-  const [lead, agents] = await Promise.all([
-    prisma.lead.findUnique({
-      where: { id: resolved.id },
-      include: {
-        assignedAgent: true,
-        activities: { orderBy: { createdAt: "desc" } },
-        messages: { orderBy: { createdAt: "desc" } },
-        sequenceRuns: {
-          orderBy: { createdAt: "desc" },
-          include: { sequenceDefinition: true },
-        },
-        suppressions: { orderBy: { createdAt: "desc" } },
-      },
-    }),
-    prisma.user.findMany({
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  const { lead, agents } = await getLeadDetailData(resolved.id);
 
   if (!lead) {
     notFound();
