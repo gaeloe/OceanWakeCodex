@@ -4,6 +4,8 @@ export const revalidate = 60;
 import { deleteTemplateAction, generateTemplateAction, saveTemplateAction } from "@/app/actions";
 import { getTemplatesData } from "@/lib/page-data";
 
+const categoryOptions = ["FIRST_TOUCH", "FOLLOW_UP", "REPLY", "NURTURE", "MANUAL"] as const;
+
 export default async function TemplatesPage({
   searchParams,
 }: {
@@ -27,7 +29,7 @@ export default async function TemplatesPage({
           </p>
           <h1>Templates</h1>
           <p className="section-copy">
-            Maintain the sequence library and adjust outbound copy without touching raw JSON or SQL.
+            Organize templates by workflow stage so agents can insert better responses without rewriting from scratch.
           </p>
         </div>
         <div className="pill">{templates.length} templates</div>
@@ -38,7 +40,7 @@ export default async function TemplatesPage({
           <div className="toolbar">
             <div>
               <h2 className="section-title">Template list</h2>
-              <p className="section-copy">Pick a template to edit, or start a new one.</p>
+              <p className="section-copy">Categories make the composer palette easier to scan under pressure.</p>
             </div>
             <a className="button secondary" href="/templates">
               New template
@@ -53,6 +55,9 @@ export default async function TemplatesPage({
                     <div>
                       <strong>{template.name}</strong>
                       <div className="muted">{template.subject}</div>
+                      <div style={{ marginTop: 8 }}>
+                        <span className="pill">{template.category.replace(/_/g, " ")}</span>
+                      </div>
                     </div>
                     <a className="button secondary" href={`/templates?template=${template.id}`}>
                       Edit
@@ -69,17 +74,24 @@ export default async function TemplatesPage({
         <div className="detail-stack">
           <section className="panel pad">
             <h2 className="section-title">Generate with AI</h2>
-            <p className="section-copy">
-              Describe the campaign and let the tool create a first draft for you.
-            </p>
+            <p className="section-copy">Describe the campaign and the tool creates a categorized draft you can use in the queue.</p>
 
             <form action={generateTemplateAction} className="form-grid">
               <input className="input" name="campaign" placeholder="Campaign name" required />
               <input className="input" name="audience" placeholder="Audience or lead type" required />
               <input className="input" name="offer" placeholder="Offer, property angle, or call to action" required />
+              <select className="select" name="category" defaultValue="FIRST_TOUCH">
+                {categoryOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
               <input className="input" name="tone" placeholder="Tone, e.g. warm and concise" />
               <textarea className="textarea" name="goal" placeholder="Goal or extra context for the draft" />
-              <button className="button" type="submit">Generate draft</button>
+              <button className="button" type="submit">
+                Generate draft
+              </button>
             </form>
 
             <div className="muted" style={{ marginTop: 12 }}>
@@ -91,7 +103,7 @@ export default async function TemplatesPage({
 
           <section className="panel pad">
             <h2 className="section-title">{selectedTemplate ? "Edit template" : "Create template"}</h2>
-            <p className="section-copy">Default cadence remains immediate, +1d, +3d, +7d, +14d.</p>
+            <p className="section-copy">Categorized templates now feed the lead-detail composer palette.</p>
 
             {generated ? <div className="empty">New draft created. Review it below and adjust if needed.</div> : null}
             {deleted ? <div className="empty">Template deleted.</div> : null}
@@ -102,6 +114,13 @@ export default async function TemplatesPage({
             <form action={saveTemplateAction} className="form-grid">
               <input type="hidden" name="templateId" value={selectedTemplate?.id ?? ""} />
               <input className="input" name="name" placeholder="Template name" defaultValue={selectedTemplate?.name ?? ""} required />
+              <select className="select" name="category" defaultValue={selectedTemplate?.category ?? "MANUAL"}>
+                {categoryOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
               <input className="input" name="subject" placeholder="Subject" defaultValue={selectedTemplate?.subject ?? ""} required />
               <textarea
                 className="textarea"

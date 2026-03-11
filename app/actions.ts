@@ -7,29 +7,19 @@ import { sendEmail } from "@/lib/email";
 import { normalizeEmail } from "@/lib/security";
 import { enqueueSequenceRun } from "@/lib/sequence";
 
+type TagTypeValue = "PIPELINE" | "QUALIFICATION" | "SOURCE" | "PRIORITY" | "CUSTOM";
+
 function textValue(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
 }
 
-function htmlFromText(text: string) {
-  return `<p>${text.replace(/\n/g, "<br />")}</p>`;
+function optionalText(value: string) {
+  return value || null;
 }
 
-async function ensureLeadSequence(leadId: string) {
-  const suppression = await prisma.suppression.findFirst({ where: { leadId, isActive: true } });
-  if (suppression) return;
-
-  const activeRun = await prisma.sequenceRun.findFirst({ where: { leadId, status: "ACTIVE" } });
-  if (activeRun) return;
-
-  const def = await prisma.sequenceDefinition.findFirst({ where: { active: true }, include: { steps: true } });
-  if (!def) return;
-
-  const run = await prisma.sequenceRun.create({
-    data: { leadId, sequenceDefinitionId: def.id, status: "ACTIVE", currentStepOrder: 1 },
-  });
-  await enqueueSequenceRun(run.id, 1, 5);
+function htmlFromText(text: string) {
+  return `<p>${text.replace(/\n/g, "<br />")}</p>`;
 }
 
 function parseCsvLine(line: string) {
@@ -63,6 +53,94 @@ function parseCsvLine(line: string) {
   return result;
 }
 
+function normalizeHeader(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function formatTagLabel(raw: string) {
+  return raw
+    .trim()
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function parseTags(raw: string) {
+  return Array.from(
+    new Set(
+      raw
+        .split(/[,\n]/)
+        .map((value) => formatTagLabel(value))
+        .filter(Boolean)
+    )
+  );
+}
+
+function inferTagType(label: string): TagTypeValue {
+  const value = label.toLowerCase();
+
+  if (["hot", "warm", "cold", "vip", "urgent"].includes(value)) return "PRIORITY";
+  if (["qualified", "unqualified", "viewing", "investor", "owneroccupier", "owner occupier"].includes(value)) {
+    return "QUALIFICATION";
+  }
+  if (["website", "google sheets", "manual import", "referral", "meta ads", "google ads"].includes(value)) {
+    return "SOURCE";
+  }
+  if (["new", "contacted", "replied", "closed"].includes(value)) return "PIPELINE";
+
+  return "CUSTOM";
+}
+
+function parseSnoozeHours(value: string) {
+  const parsed = Number(value || "4");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 4;
+}
+
+async function syncLeadTags(leadId: string, rawTags: string) {
+  const labels = parseTags(rawTags);
+
+  await prisma.leadTag.deleteMany({ where: { leadId } });
+  if (!labels.length) return [];
+
+  const tags = await Promise.all(
+    labels.map((label) =>
+      prisma.tag.upsert({
+        where: { label },
+        update: {},
+        create: {
+          label,
+          type: inferTagType(label),
+        },
+      })
+    )
+  );
+
+  await prisma.leadTag.createMany({
+    data: tags.map((tag) => ({ leadId, tagId: tag.id })),
+    skipDuplicates: true,
+  });
+
+  return labels;
+}
+
+async function ensureLeadSequence(leadId: string) {
+  const suppression = await prisma.suppression.findFirst({ where: { leadId, isActive: true } });
+  if (suppression) return;
+
+  const activeRun = await prisma.sequenceRun.findFirst({ where: { leadId, status: "ACTIVE" } });
+  if (activeRun) return;
+
+  const def = await prisma.sequenceDefinition.findFirst({ where: { active: true }, include: { steps: true } });
+  if (!def) return;
+
+  const run = await prisma.sequenceRun.create({
+    data: { leadId, sequenceDefinitionId: def.id, status: "ACTIVE", currentStepOrder: 1 },
+  });
+  await enqueueSequenceRun(run.id, 1, 5);
+}
+
 export async function assignLeadAction(formData: FormData) {
   const leadId = textValue(formData, "leadId");
   const agentId = textValue(formData, "agentId");
@@ -82,9 +160,51 @@ export async function assignLeadAction(formData: FormData) {
     },
   });
 
+  revalidatePath("/queue");
   revalidatePath("/leads");
   revalidatePath(`/leads/${leadId}`);
   revalidatePath("/dashboard");
+}
+
+export async function updateLeadContextAction(formData: FormData) {
+  const leadId = textValue(formData, "leadId");
+  if (!leadId) return;
+
+  const update = {
+    firstName: optionalText(textValue(formData, "firstName")),
+    lastName: optionalText(textValue(formData, "lastName")),
+    phone: optionalText(textValue(formData, "phone")),
+    source: optionalText(textValue(formData, "source")),
+    country: optionalText(textValue(formData, "country")),
+    language: optionalText(textValue(formData, "language")),
+    propertyType: optionalText(textValue(formData, "propertyType")),
+    areaInterest: optionalText(textValue(formData, "areaInterest")),
+    budgetRange: optionalText(textValue(formData, "budgetRange")),
+    utmCampaign: optionalText(textValue(formData, "utmCampaign")),
+    notes: optionalText(textValue(formData, "notes")),
+    status: (textValue(formData, "status") || "NEW") as "NEW" | "CONTACTED" | "REPLIED" | "CLOSED",
+    snoozedUntil: textValue(formData, "clearSnooze") ? null : undefined,
+  };
+
+  await prisma.lead.update({
+    where: { id: leadId },
+    data: update,
+  });
+
+  const tagLabels = await syncLeadTags(leadId, textValue(formData, "tags"));
+
+  await prisma.leadActivity.create({
+    data: {
+      leadId,
+      activityType: "lead_context_updated",
+      payload: { ...update, tags: tagLabels },
+    },
+  });
+
+  revalidatePath("/queue");
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${leadId}`);
+  redirect(`/leads/${leadId}?saved=1`);
 }
 
 export async function updateSequenceStatusAction(formData: FormData) {
@@ -122,6 +242,7 @@ export async function updateSequenceStatusAction(formData: FormData) {
     },
   });
 
+  revalidatePath("/queue");
   revalidatePath(`/leads/${leadId}`);
   revalidatePath("/dashboard");
 }
@@ -168,6 +289,14 @@ export async function sendLeadMessageAction(formData: FormData) {
     },
   });
 
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: {
+      status: lead.status === "NEW" ? "CONTACTED" : lead.status,
+      snoozedUntil: null,
+    },
+  });
+
   await sendEmail({
     to: lead.email,
     from: fromEmail,
@@ -187,13 +316,21 @@ export async function sendLeadMessageAction(formData: FormData) {
     },
   });
 
+  revalidatePath("/queue");
   revalidatePath(`/leads/${lead.id}`);
   revalidatePath("/dashboard");
+  redirect(`/leads/${lead.id}?sent=1`);
 }
 
 export async function saveTemplateAction(formData: FormData) {
   const templateId = textValue(formData, "templateId");
   const name = textValue(formData, "name");
+  const category = (textValue(formData, "category") || "MANUAL") as
+    | "FIRST_TOUCH"
+    | "FOLLOW_UP"
+    | "REPLY"
+    | "NURTURE"
+    | "MANUAL";
   const subject = textValue(formData, "subject");
   const bodyText = textValue(formData, "bodyText");
 
@@ -201,6 +338,7 @@ export async function saveTemplateAction(formData: FormData) {
 
   const data = {
     name,
+    category,
     subject,
     bodyText,
     bodyHtml: htmlFromText(bodyText),
@@ -212,7 +350,9 @@ export async function saveTemplateAction(formData: FormData) {
       data,
     });
   } else {
-    await prisma.template.create({ data });
+    const template = await prisma.template.create({ data });
+    revalidatePath("/templates");
+    redirect(`/templates?template=${template.id}`);
   }
 
   revalidatePath("/templates");
@@ -237,17 +377,26 @@ export async function deleteTemplateAction(formData: FormData) {
 
 export async function snoozeLeadAction(formData: FormData) {
   const leadId = textValue(formData, "leadId");
+  const snoozeHours = parseSnoozeHours(textValue(formData, "hours"));
   if (!leadId) return;
+
+  const until = new Date(Date.now() + snoozeHours * 60 * 60 * 1000);
+
+  await prisma.lead.update({
+    where: { id: leadId },
+    data: { snoozedUntil: until },
+  });
 
   await prisma.leadActivity.create({
     data: {
       leadId,
-      activityType: "lead_snoozed_4h",
-      payload: { until: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString() },
+      activityType: `lead_snoozed_${snoozeHours}h`,
+      payload: { until: until.toISOString(), hours: snoozeHours },
     },
   });
 
   revalidatePath("/queue");
+  revalidatePath(`/leads/${leadId}`);
 }
 
 export async function importLeadsAction(formData: FormData) {
@@ -267,43 +416,82 @@ export async function importLeadsAction(formData: FormData) {
     redirect("/settings?imported=0");
   }
 
-  const firstLine = parseCsvLine(lines[0]).map((item) => item.toLowerCase());
-  const hasHeader = firstLine.includes("email");
+  const rawHeader = parseCsvLine(lines[0]);
+  const header = rawHeader.map(normalizeHeader);
+  const hasHeader = header.includes("email");
   const dataLines = hasHeader ? lines.slice(1) : lines;
   let imported = 0;
 
+  const getCell = (cells: string[], ...names: string[]) => {
+    if (!hasHeader) return "";
+
+    for (const name of names) {
+      const index = header.indexOf(normalizeHeader(name));
+      if (index >= 0) return cells[index] || "";
+    }
+
+    return "";
+  };
+
   for (const line of dataLines) {
     const cells = parseCsvLine(line);
-    const email = cells[0]?.trim();
+    const email = (hasHeader ? getCell(cells, "email") : cells[0])?.trim();
     if (!email) continue;
 
     const normalizedEmail = normalizeEmail(email);
-    const firstName = hasHeader ? cells[firstLine.indexOf("firstname")] || cells[firstLine.indexOf("first_name")] || "" : cells[1] || "";
-    const lastName = hasHeader ? cells[firstLine.indexOf("lastname")] || cells[firstLine.indexOf("last_name")] || "" : cells[2] || "";
-    const source = hasHeader ? cells[firstLine.indexOf("source")] || sourceOverride : cells[3] || sourceOverride;
+    const firstName = hasHeader ? getCell(cells, "firstName", "first_name") : cells[1] || "";
+    const lastName = hasHeader ? getCell(cells, "lastName", "last_name") : cells[2] || "";
+    const source = hasHeader ? getCell(cells, "source") || sourceOverride : cells[3] || sourceOverride;
+    const phone = hasHeader ? getCell(cells, "phone", "phoneNumber", "phone_number") : "";
+    const country = hasHeader ? getCell(cells, "country") : "";
+    const language = hasHeader ? getCell(cells, "language") : "";
+    const propertyType = hasHeader ? getCell(cells, "propertyType", "property_type") : "";
+    const areaInterest = hasHeader ? getCell(cells, "areaInterest", "area_interest") : "";
+    const budgetRange = hasHeader ? getCell(cells, "budgetRange", "budget_range") : "";
+    const utmCampaign = hasHeader ? getCell(cells, "utmCampaign", "utm_campaign") : "";
+    const notes = hasHeader ? getCell(cells, "notes") : "";
+    const tags = hasHeader ? getCell(cells, "tags") : "";
 
     const lead = await prisma.lead.upsert({
       where: { normalizedEmail },
       update: {
         email,
-        firstName: firstName || null,
-        lastName: lastName || null,
-        source: source || "Manual import",
+        firstName: optionalText(firstName),
+        lastName: optionalText(lastName),
+        source: optionalText(source || "Manual import"),
+        phone: optionalText(phone),
+        country: optionalText(country),
+        language: optionalText(language),
+        propertyType: optionalText(propertyType),
+        areaInterest: optionalText(areaInterest),
+        budgetRange: optionalText(budgetRange),
+        utmCampaign: optionalText(utmCampaign),
+        notes: optionalText(notes),
       },
       create: {
         email,
         normalizedEmail,
-        firstName: firstName || null,
-        lastName: lastName || null,
-        source: source || "Manual import",
+        firstName: optionalText(firstName),
+        lastName: optionalText(lastName),
+        source: optionalText(source || "Manual import"),
+        phone: optionalText(phone),
+        country: optionalText(country),
+        language: optionalText(language),
+        propertyType: optionalText(propertyType),
+        areaInterest: optionalText(areaInterest),
+        budgetRange: optionalText(budgetRange),
+        utmCampaign: optionalText(utmCampaign),
+        notes: optionalText(notes),
       },
     });
+
+    const tagLabels = await syncLeadTags(lead.id, tags);
 
     await prisma.leadActivity.create({
       data: {
         leadId: lead.id,
         activityType: "lead_imported_manual",
-        payload: { source: source || "Manual import" },
+        payload: { source: source || "Manual import", tags: tagLabels },
       },
     });
 
@@ -311,6 +499,7 @@ export async function importLeadsAction(formData: FormData) {
     imported += 1;
   }
 
+  revalidatePath("/queue");
   revalidatePath("/dashboard");
   revalidatePath("/leads");
   redirect(`/settings?imported=${imported}`);
@@ -322,6 +511,12 @@ export async function generateTemplateAction(formData: FormData) {
   const tone = textValue(formData, "tone");
   const offer = textValue(formData, "offer");
   const goal = textValue(formData, "goal");
+  const category = (textValue(formData, "category") || "FIRST_TOUCH") as
+    | "FIRST_TOUCH"
+    | "FOLLOW_UP"
+    | "REPLY"
+    | "NURTURE"
+    | "MANUAL";
 
   if (!campaign || !audience || !offer) {
     redirect("/templates?generated=0");
@@ -347,7 +542,7 @@ export async function generateTemplateAction(formData: FormData) {
           },
           {
             role: "user",
-            content: `Campaign: ${campaign}\nAudience: ${audience}\nTone: ${tone || "professional and warm"}\nOffer: ${offer}\nGoal: ${goal || "encourage a reply"}\nWrite one email template.`,
+            content: `Campaign: ${campaign}\nAudience: ${audience}\nTone: ${tone || "professional and warm"}\nOffer: ${offer}\nGoal: ${goal || "encourage a reply"}\nCategory: ${category}\nWrite one email template.`,
           },
         ],
         text: {
@@ -374,12 +569,13 @@ export async function generateTemplateAction(formData: FormData) {
       const outputText = payload.output_text as string | undefined;
       if (outputText) {
         const parsed = JSON.parse(outputText) as { name?: string; subject?: string; bodyText?: string };
-        campaign && (subject = parsed.subject || subject);
+        subject = parsed.subject || subject;
         bodyText = parsed.bodyText || bodyText;
 
         const template = await prisma.template.create({
           data: {
             name: parsed.name || `${campaign} AI draft`,
+            category,
             subject,
             bodyText,
             bodyHtml: htmlFromText(bodyText),
@@ -395,6 +591,7 @@ export async function generateTemplateAction(formData: FormData) {
   const template = await prisma.template.create({
     data: {
       name: `${campaign} draft`,
+      category,
       subject,
       bodyText,
       bodyHtml: htmlFromText(bodyText),

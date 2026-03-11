@@ -11,8 +11,10 @@ export const getDashboardData = unstable_cache(
       spam,
       activeSequences,
       pausedSequences,
+      snoozedLeads,
       recentLeads,
       recentActivity,
+      topTags,
     ] = await Promise.all([
       prisma.lead.count(),
       prisma.lead.count({ where: { status: "REPLIED" } }),
@@ -21,15 +23,24 @@ export const getDashboardData = unstable_cache(
       prisma.suppression.count({ where: { reason: "SPAM_REPORT", isActive: true } }),
       prisma.sequenceRun.count({ where: { status: "ACTIVE" } }),
       prisma.sequenceRun.count({ where: { status: "PAUSED" } }),
+      prisma.lead.count({ where: { snoozedUntil: { gt: new Date() } } }),
       prisma.lead.findMany({
         orderBy: { createdAt: "desc" },
         take: 6,
-        include: { assignedAgent: true },
+        include: {
+          assignedAgent: true,
+          tags: { include: { tag: true } },
+        },
       }),
       prisma.leadActivity.findMany({
         orderBy: { createdAt: "desc" },
         take: 8,
         include: { lead: true, actorUser: true },
+      }),
+      prisma.tag.findMany({
+        orderBy: { leads: { _count: "desc" } },
+        take: 6,
+        include: { _count: { select: { leads: true } } },
       }),
     ]);
 
@@ -41,8 +52,10 @@ export const getDashboardData = unstable_cache(
       spam,
       activeSequences,
       pausedSequences,
+      snoozedLeads,
       recentLeads,
       recentActivity,
+      topTags,
     };
   },
   ["dashboard-data"],
@@ -50,14 +63,14 @@ export const getDashboardData = unstable_cache(
 );
 
 export const getTemplatesData = unstable_cache(
-  async () => prisma.template.findMany({ orderBy: { updatedAt: "desc" } }),
+  async () => prisma.template.findMany({ orderBy: [{ category: "asc" }, { updatedAt: "desc" }] }),
   ["templates-data"],
   { revalidate: 60 }
 );
 
 export const getLeadDetailData = unstable_cache(
   async (leadId: string) => {
-    const [lead, agents, templates] = await Promise.all([
+    const [lead, agents, templates, tags] = await Promise.all([
       prisma.lead.findUnique({
         where: { id: leadId },
         include: {
@@ -83,18 +96,25 @@ export const getLeadDetailData = unstable_cache(
             },
           },
           suppressions: { orderBy: { createdAt: "desc" } },
+          tags: {
+            orderBy: { tag: { label: "asc" } },
+            include: { tag: true },
+          },
         },
       }),
       prisma.user.findMany({
         orderBy: { name: "asc" },
       }),
       prisma.template.findMany({
-        orderBy: { updatedAt: "desc" },
-        take: 8,
+        orderBy: [{ category: "asc" }, { updatedAt: "desc" }],
+        take: 12,
+      }),
+      prisma.tag.findMany({
+        orderBy: [{ type: "asc" }, { label: "asc" }],
       }),
     ]);
 
-    return { lead, agents, templates };
+    return { lead, agents, templates, tags };
   },
   ["lead-detail-data"],
   { revalidate: 20 }
@@ -111,12 +131,15 @@ export const getLeadsPageData = unstable_cache(
                 { firstName: { contains: query, mode: "insensitive" } },
                 { lastName: { contains: query, mode: "insensitive" } },
                 { source: { contains: query, mode: "insensitive" } },
+                { country: { contains: query, mode: "insensitive" } },
+                { areaInterest: { contains: query, mode: "insensitive" } },
+                { tags: { some: { tag: { label: { contains: query, mode: "insensitive" } } } } },
               ],
             }
           : {}),
         ...(status !== "ALL" ? { status: status as "NEW" | "CONTACTED" | "REPLIED" | "CLOSED" } : {}),
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ snoozedUntil: "asc" }, { updatedAt: "desc" }],
       take: 50,
       include: {
         assignedAgent: true,
@@ -127,6 +150,10 @@ export const getLeadsPageData = unstable_cache(
         suppressions: {
           where: { isActive: true },
         },
+        tags: {
+          include: { tag: true },
+          orderBy: { tag: { label: "asc" } },
+        },
       },
     }),
   ["leads-page-data"],
@@ -136,7 +163,10 @@ export const getLeadsPageData = unstable_cache(
 export const getQueueData = unstable_cache(
   async () =>
     prisma.lead.findMany({
-      orderBy: { updatedAt: "desc" },
+      where: {
+        OR: [{ snoozedUntil: null }, { snoozedUntil: { lt: new Date() } }],
+      },
+      orderBy: [{ updatedAt: "desc" }],
       take: 40,
       include: {
         assignedAgent: true,
@@ -151,6 +181,10 @@ export const getQueueData = unstable_cache(
         },
         suppressions: {
           where: { isActive: true },
+        },
+        tags: {
+          include: { tag: true },
+          orderBy: { tag: { label: "asc" } },
         },
       },
     }),

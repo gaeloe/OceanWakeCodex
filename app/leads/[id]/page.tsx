@@ -2,12 +2,36 @@ export const dynamic = "force-dynamic";
 export const revalidate = 20;
 
 import { notFound } from "next/navigation";
-import { assignLeadAction, sendLeadMessageAction, updateSequenceStatusAction } from "@/app/actions";
+import {
+  assignLeadAction,
+  sendLeadMessageAction,
+  updateLeadContextAction,
+  updateSequenceStatusAction,
+} from "@/app/actions";
 import { getLeadDetailData } from "@/lib/page-data";
 
-export default async function LeadDetailPage(context: { params: { id: string } | Promise<{ id: string }> }) {
-  const resolved = await Promise.resolve(context.params);
-  const { lead, agents, templates } = await getLeadDetailData(resolved.id);
+type SearchParams = {
+  template?: string;
+  saved?: string;
+  sent?: string;
+};
+
+const statusOptions = ["NEW", "CONTACTED", "REPLIED", "CLOSED"] as const;
+
+function valueOrFallback(value: string | null | undefined, fallback: string) {
+  return value?.trim() ? value : fallback;
+}
+
+export default async function LeadDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string } | Promise<{ id: string }>;
+  searchParams?: SearchParams | Promise<SearchParams>;
+}) {
+  const resolvedParams = await Promise.resolve(params);
+  const resolvedSearch = await Promise.resolve(searchParams);
+  const { lead, agents, templates, tags } = await getLeadDetailData(resolvedParams.id);
 
   if (!lead) {
     notFound();
@@ -16,22 +40,40 @@ export default async function LeadDetailPage(context: { params: { id: string } |
   const latestRun = lead.sequenceRuns[0];
   const activeSuppression = lead.suppressions.find((item) => item.isActive);
   const sequenceSteps = latestRun?.sequenceDefinition?.steps ?? [];
+  const selectedTemplate =
+    templates.find((template) => template.id === resolvedSearch?.template) ??
+    templates.find((template) => template.category === "REPLY") ??
+    templates[0] ??
+    null;
+  const selectedLeadTags = lead.tags.map((item) => item.tag.label).join(", ");
+  const saveSuccess = resolvedSearch?.saved === "1";
+  const sentSuccess = resolvedSearch?.sent === "1";
+  const groupedTemplates = templates.reduce<Record<string, typeof templates>>((groups, template) => {
+    const key = template.category.replace(/_/g, " ");
+    groups[key] = groups[key] ?? [];
+    groups[key].push(template);
+    return groups;
+  }, {});
 
   return (
     <>
       <section className="panel hero">
         <div>
           <p className="brand-eyebrow" style={{ color: "var(--accent)" }}>
-            Lead Detail
+            Lead Workspace
           </p>
-          <h1>{lead.email}</h1>
+          <h1>{[lead.firstName, lead.lastName].filter(Boolean).join(" ") || lead.email}</h1>
           <p className="section-copy">
-            Review full activity, message history, assignment state, and sequence control from one page.
+            Conversation-first workspace with editable context, visible automation state, and quick response tools.
           </p>
         </div>
         <div className="button-row">
-          <a className="button secondary" href="/leads">
-            Back to Leads
+          <span className="pill">{lead.status}</span>
+          {lead.snoozedUntil && lead.snoozedUntil > new Date() ? (
+            <span className="pill warning">Snoozed until {new Date(lead.snoozedUntil).toLocaleString()}</span>
+          ) : null}
+          <a className="button secondary" href="/queue">
+            Back to Queue
           </a>
         </div>
       </section>
@@ -41,21 +83,25 @@ export default async function LeadDetailPage(context: { params: { id: string } |
           <div className="toolbar">
             <div>
               <h2 className="section-title">Conversation thread</h2>
-              <p className="section-copy">Chat-first workspace, not a log viewer.</p>
+              <p className="section-copy">Agents can reply without losing context or leaving the lead record.</p>
             </div>
             <div className="button-row">
-              <span className="pill">{lead.status}</span>
               {latestRun ? (
                 <span className={`pill ${latestRun.status === "ACTIVE" ? "success" : latestRun.status === "PAUSED" ? "warning" : ""}`}>
                   {latestRun.status}
                 </span>
-              ) : null}
+              ) : (
+                <span className="pill">No sequence</span>
+              )}
             </div>
           </div>
 
           <div className="context-chip">
-            {[lead.source, lead.email].filter(Boolean).join(" · ")}
+            {[lead.source, lead.areaInterest, lead.budgetRange].filter(Boolean).join(" · ")}
           </div>
+
+          {saveSuccess ? <div className="empty">Lead context updated.</div> : null}
+          {sentSuccess ? <div className="empty">Message sent and lead returned to the live queue.</div> : null}
 
           <div className="chat-thread">
             {lead.messages.length ? (
@@ -90,17 +136,27 @@ export default async function LeadDetailPage(context: { params: { id: string } |
             <div className="toolbar">
               <div>
                 <h3 className="section-title">Reply composer</h3>
-                <p className="section-copy">Templates stay within reach while you write.</p>
+                <p className="section-copy">Insert a canned response by selecting it from the template palette.</p>
               </div>
+              {selectedTemplate ? <span className="pill success">Using {selectedTemplate.name}</span> : null}
             </div>
 
             <div className="template-palette">
-              {templates.map((template) => (
-                <details className="template-palette-item" key={template.id}>
-                  <summary>{template.name}</summary>
+              {Object.entries(groupedTemplates).map(([group, groupTemplates]) => (
+                <details className="template-palette-item" key={group} open={group === "REPLY"}>
+                  <summary>{group}</summary>
                   <div className="template-preview">
-                    <strong>{template.subject}</strong>
-                    <p>{template.bodyText.slice(0, 160)}{template.bodyText.length > 160 ? "..." : ""}</p>
+                    {groupTemplates.map((template) => (
+                      <div className="template-choice" key={template.id}>
+                        <div>
+                          <strong>{template.name}</strong>
+                          <p>{template.subject}</p>
+                        </div>
+                        <a className="button secondary" href={`/leads/${lead.id}?template=${template.id}`}>
+                          Use
+                        </a>
+                      </div>
+                    ))}
                   </div>
                 </details>
               ))}
@@ -108,11 +164,29 @@ export default async function LeadDetailPage(context: { params: { id: string } |
 
             <form action={sendLeadMessageAction} className="form-grid">
               <input type="hidden" name="leadId" value={lead.id} />
-              <input className="input" name="subject" placeholder="Subject line" required />
-              <textarea className="textarea" name="bodyText" placeholder="Type a reply or use a template above" required />
+              <input
+                className="input"
+                name="subject"
+                placeholder="Subject line"
+                defaultValue={selectedTemplate?.subject ?? ""}
+                required
+              />
+              <textarea
+                className="textarea"
+                name="bodyText"
+                placeholder="Type a reply or choose a template above"
+                defaultValue={selectedTemplate?.bodyText ?? ""}
+                required
+              />
               <div className="button-row">
-                <button className="button" type="submit">Send now</button>
-                <span className="muted">One-click canned reply insertion is the next pass after this UX layer.</span>
+                <button className="button" type="submit">
+                  Send now
+                </button>
+                {selectedTemplate ? (
+                  <a className="button secondary" href={`/templates?template=${selectedTemplate.id}`}>
+                    Edit template
+                  </a>
+                ) : null}
               </div>
             </form>
           </section>
@@ -123,24 +197,76 @@ export default async function LeadDetailPage(context: { params: { id: string } |
             <div className="toolbar">
               <div>
                 <h2 className="section-title">Lead context</h2>
-                <p className="section-copy">Compact context card that stays visible while the agent composes.</p>
+                <p className="section-copy">Editable context card that stays next to the thread.</p>
               </div>
               {activeSuppression ? <span className="pill danger">{activeSuppression.reason}</span> : null}
             </div>
 
-            <div className="list">
-              <div className="list-item">
-                <strong>Identity</strong>
-                <div className="muted">{[lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unknown name"}</div>
-                <div className="muted">{lead.email}</div>
+            <form action={updateLeadContextAction} className="form-grid">
+              <input type="hidden" name="leadId" value={lead.id} />
+              <div className="form-grid two">
+                <input className="input" name="firstName" placeholder="First name" defaultValue={lead.firstName ?? ""} />
+                <input className="input" name="lastName" placeholder="Last name" defaultValue={lead.lastName ?? ""} />
               </div>
-              <div className="list-item">
-                <strong>Enquiry context</strong>
-                <div className="muted">Source: {lead.source ?? "Unknown"}</div>
-                <div className="muted">Assigned: {lead.assignedAgent?.name ?? lead.assignedAgent?.email ?? "Unassigned"}</div>
-                <div className="muted">Created: {new Date(lead.createdAt).toLocaleString()}</div>
+              <div className="form-grid two">
+                <input className="input" name="phone" placeholder="Phone" defaultValue={lead.phone ?? ""} />
+                <select className="select" name="status" defaultValue={lead.status}>
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
+              <div className="form-grid two">
+                <input className="input" name="source" placeholder="Source" defaultValue={lead.source ?? ""} />
+                <input className="input" name="utmCampaign" placeholder="UTM campaign" defaultValue={lead.utmCampaign ?? ""} />
+              </div>
+              <div className="form-grid two">
+                <input className="input" name="country" placeholder="Country" defaultValue={lead.country ?? ""} />
+                <input className="input" name="language" placeholder="Language" defaultValue={lead.language ?? ""} />
+              </div>
+              <div className="form-grid two">
+                <input className="input" name="propertyType" placeholder="Property type" defaultValue={lead.propertyType ?? ""} />
+                <input className="input" name="areaInterest" placeholder="Area of interest" defaultValue={lead.areaInterest ?? ""} />
+              </div>
+              <input className="input" name="budgetRange" placeholder="Budget range" defaultValue={lead.budgetRange ?? ""} />
+              <textarea
+                className="textarea"
+                name="tags"
+                placeholder="Tags, separated by commas"
+                defaultValue={selectedLeadTags}
+              />
+              <textarea
+                className="textarea"
+                name="notes"
+                placeholder="Internal notes and qualification context"
+                defaultValue={lead.notes ?? ""}
+              />
+              <div className="tag-row">
+                {lead.tags.map((entry) => (
+                  <span className="pill" key={entry.tag.id}>
+                    {entry.tag.label}
+                  </span>
+                ))}
+                {!lead.tags.length ? <span className="muted">No tags yet.</span> : null}
+              </div>
+              {!!tags.length ? (
+                <div className="muted">
+                  Suggested tags: {tags.slice(0, 8).map((tag) => tag.label).join(", ")}
+                </div>
+              ) : null}
+              <div className="button-row">
+                <button className="button secondary" type="submit">
+                  Save context
+                </button>
+                {lead.snoozedUntil ? (
+                  <button className="button secondary" type="submit" name="clearSnooze" value="1">
+                    Clear snooze
+                  </button>
+                ) : null}
+              </div>
+            </form>
 
             <form action={assignLeadAction} className="form-grid" style={{ marginTop: 16 }}>
               <input type="hidden" name="leadId" value={lead.id} />
@@ -152,31 +278,47 @@ export default async function LeadDetailPage(context: { params: { id: string } |
                   </option>
                 ))}
               </select>
-              <button className="button secondary" type="submit">Save assignment</button>
+              <button className="button secondary" type="submit">
+                Save assignment
+              </button>
             </form>
+
+            <div className="list" style={{ marginTop: 16 }}>
+              <div className="list-item">
+                <strong>Identity</strong>
+                <div className="muted">{valueOrFallback(lead.email, "No email")}</div>
+                <div className="muted">{valueOrFallback(lead.phone, "No phone captured")}</div>
+              </div>
+            </div>
           </section>
 
           <section className="panel pad">
             <div className="toolbar">
               <div>
                 <h2 className="section-title">Sequence rail</h2>
-                <p className="section-copy">Make automation transparent and intervenable.</p>
+                <p className="section-copy">Automation is visible, previewable, and manually overrideable.</p>
               </div>
               <div className="button-row">
                 <form action={updateSequenceStatusAction}>
                   <input type="hidden" name="leadId" value={lead.id} />
                   <input type="hidden" name="action" value="pause" />
-                  <button className="button secondary" type="submit">Pause</button>
+                  <button className="button secondary" type="submit">
+                    Pause
+                  </button>
                 </form>
                 <form action={updateSequenceStatusAction}>
                   <input type="hidden" name="leadId" value={lead.id} />
                   <input type="hidden" name="action" value="resume" />
-                  <button className="button secondary" type="submit">Resume</button>
+                  <button className="button secondary" type="submit">
+                    Resume
+                  </button>
                 </form>
                 <form action={updateSequenceStatusAction}>
                   <input type="hidden" name="leadId" value={lead.id} />
                   <input type="hidden" name="action" value="stop" />
-                  <button className="button danger" type="submit">Stop</button>
+                  <button className="button danger" type="submit">
+                    Stop
+                  </button>
                 </form>
               </div>
             </div>
@@ -200,6 +342,7 @@ export default async function LeadDetailPage(context: { params: { id: string } |
                         <div className="muted">
                           {isCurrent ? `Scheduled after ${step.delayMinutes} minutes` : `Delay ${step.delayMinutes} minutes`}
                         </div>
+                        <div className="muted">{step.template.category.replace(/_/g, " ")}</div>
                         <details className="template-preview">
                           <summary>Preview email</summary>
                           <p>{step.template.bodyText}</p>

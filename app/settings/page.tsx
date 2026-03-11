@@ -22,7 +22,11 @@ export default async function SettingsPage({
     email: row.email,
     firstName: row.firstName,
     lastName: row.lastName,
-    source: row.source || "Google Sheets"
+    source: row.source || "Google Sheets",
+    country: row.country,
+    areaInterest: row.areaInterest,
+    budgetRange: row.budgetRange,
+    tags: row.tags
   };
 
   UrlFetchApp.fetch(url, {
@@ -54,7 +58,7 @@ export default async function SettingsPage({
           <section className="panel pad">
             <h2 className="section-title">Manual lead import</h2>
             <p className="section-copy">
-              Paste one lead per line as `email,firstName,lastName,source`, or include a header row with `email`.
+              Paste one lead per line as `email,firstName,lastName,source`, or include a header row with richer fields.
             </p>
 
             {hasImportMessage ? (
@@ -66,11 +70,15 @@ export default async function SettingsPage({
               <textarea
                 className="textarea"
                 name="rows"
-                placeholder={`email,firstName,lastName,source\njane@example.com,Jane,Doe,Google Sheets`}
+                placeholder={`email,firstName,lastName,source,country,areaInterest,budgetRange,tags\njane@example.com,Jane,Doe,Google Sheets,Singapore,Phuket west coast,$1m-$2m,"Hot, Investor"`}
                 required
               />
               <button className="button" type="submit">Import leads</button>
             </form>
+            <div className="muted" style={{ marginTop: 12 }}>
+              Supported headers: email, firstName, lastName, phone, source, country, language, propertyType,
+              areaInterest, budgetRange, utmCampaign, notes, tags.
+            </div>
           </section>
 
           <section className="panel pad">

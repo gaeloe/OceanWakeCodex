@@ -439,6 +439,12 @@ textarea {
   font-size: 14px;
 }
 
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .queue-side {
   display: grid;
   gap: 10px;
@@ -545,6 +551,19 @@ textarea {
   color: var(--muted);
 }
 
+.template-choice {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.template-choice:last-child {
+  border-bottom: 0;
+}
+
 .template-preview p {
   margin: 8px 0 0;
   white-space: pre-wrap;
@@ -641,7 +660,7 @@ textarea {
     right: 10px;
     bottom: 10px;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 8px;
     padding: 10px;
     border-radius: 20px;

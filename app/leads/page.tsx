@@ -29,7 +29,7 @@ export default async function LeadsPage({
             Lead Inbox
           </p>
           <h1>Leads</h1>
-          <p className="section-copy">Search, triage, and open the full lead history from a single queue.</p>
+          <p className="section-copy">Search across people, tags, areas, and source context without dropping into raw records.</p>
         </div>
         <div className="pill">{leads.length} visible</div>
       </section>
@@ -38,10 +38,10 @@ export default async function LeadsPage({
         <div className="toolbar">
           <div>
             <h2 className="section-title">Filter queue</h2>
-            <p className="section-copy">Use lightweight filters instead of paging through raw records.</p>
+            <p className="section-copy">Search by email, name, area, country, source, or tags.</p>
           </div>
           <form action="/leads" method="get">
-            <input className="input" type="search" name="q" defaultValue={query} placeholder="Search email, name, source" />
+            <input className="input" type="search" name="q" defaultValue={query} placeholder="Search leads or tags" />
             <select className="select" name="status" defaultValue={status}>
               {statusOptions.map((option) => (
                 <option key={option} value={option}>
@@ -60,13 +60,21 @@ export default async function LeadsPage({
         <div className="toolbar">
           <div>
             <h2 className="section-title">Bulk actions</h2>
-            <p className="section-copy">Keep fast actions visible even before the full bulk workflow lands.</p>
+            <p className="section-copy">The workflow scaffolding is visible so the operator path stays obvious.</p>
           </div>
           <div className="button-row">
-            <button className="button secondary" type="button">Pause selected</button>
-            <button className="button secondary" type="button">Resume selected</button>
-            <button className="button secondary" type="button">Tag selected</button>
-            <button className="button secondary" type="button">Export CSV</button>
+            <button className="button secondary" type="button">
+              Pause selected
+            </button>
+            <button className="button secondary" type="button">
+              Resume selected
+            </button>
+            <button className="button secondary" type="button">
+              Retag selected
+            </button>
+            <button className="button secondary" type="button">
+              Export CSV
+            </button>
           </div>
         </div>
       </section>
@@ -78,11 +86,11 @@ export default async function LeadsPage({
               <tr>
                 <th>Select</th>
                 <th>Lead</th>
+                <th>Context</th>
                 <th>Status</th>
                 <th>Sequence</th>
                 <th>Assigned</th>
-                <th>Source</th>
-                <th>Opened</th>
+                <th>Open</th>
               </tr>
             </thead>
             <tbody>
@@ -92,17 +100,35 @@ export default async function LeadsPage({
 
                 return (
                   <tr key={lead.id}>
-                    <td><input type="checkbox" aria-label={`Select ${lead.email}`} /></td>
+                    <td>
+                      <input type="checkbox" aria-label={`Select ${lead.email}`} />
+                    </td>
                     <td>
                       <a href={`/leads/${lead.id}`}>
-                        <strong>{lead.email}</strong>
+                        <strong>{[lead.firstName, lead.lastName].filter(Boolean).join(" ") || lead.email}</strong>
                       </a>
-                      <div className="muted">
-                        {[lead.firstName, lead.lastName].filter(Boolean).join(" ") || "No contact name"}
-                      </div>
+                      <div className="muted">{lead.email}</div>
+                      <div className="muted">{lead.phone ?? "No phone captured"}</div>
+                    </td>
+                    <td>
+                      <div className="muted">{[lead.source, lead.country, lead.areaInterest].filter(Boolean).join(" · ") || "No context yet"}</div>
+                      {lead.tags.length ? (
+                        <div className="tag-row" style={{ marginTop: 8 }}>
+                          {lead.tags.map((entry) => (
+                            <span className="pill" key={entry.tag.id}>
+                              {entry.tag.label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </td>
                     <td>
                       <span className="pill">{lead.status}</span>
+                      {lead.snoozedUntil && lead.snoozedUntil > new Date() ? (
+                        <div style={{ marginTop: 8 }}>
+                          <span className="pill warning">Snoozed</span>
+                        </div>
+                      ) : null}
                       {activeSuppression ? (
                         <div style={{ marginTop: 8 }}>
                           <span className="pill danger">{activeSuppression.reason}</span>
@@ -113,7 +139,6 @@ export default async function LeadsPage({
                       {latestRun ? <span className="pill success">{latestRun.status}</span> : <span className="muted">No run</span>}
                     </td>
                     <td>{lead.assignedAgent?.name ?? lead.assignedAgent?.email ?? "Unassigned"}</td>
-                    <td>{lead.source ?? "Unknown"}</td>
                     <td>
                       <a className="button secondary" href={`/leads/${lead.id}`}>
                         Open

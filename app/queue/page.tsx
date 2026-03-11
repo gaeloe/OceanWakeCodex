@@ -51,7 +51,7 @@ function buildQueueItem(
     return {
       priority: "P1",
       label: "Lead replied",
-      preview: inbound.bodyText.slice(0, 80) + (inbound.bodyText.length > 80 ? "..." : ""),
+      preview: inbound.bodyText.slice(0, 96) + (inbound.bodyText.length > 96 ? "..." : ""),
       actionLabel: "Open thread",
     };
   }
@@ -138,12 +138,31 @@ export default async function QueuePage({
                   <span>{lead.assignedAgent?.name ?? "Unassigned"}</span>
                   <span>{minutesSince(lead.updatedAt)} min ago</span>
                 </div>
+                <div className="queue-meta">
+                  {[lead.areaInterest, lead.budgetRange, lead.country].filter(Boolean).map((item) => (
+                    <span key={item}>{item}</span>
+                  ))}
+                </div>
+                {lead.tags.length ? (
+                  <div className="tag-row">
+                    {lead.tags.map((entry) => (
+                      <span className="pill" key={entry.tag.id}>
+                        {entry.tag.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </a>
               <div className="queue-side">
-                <a className="button" href={`/leads/${lead.id}`}>{queueItem.actionLabel}</a>
+                <a className="button" href={`/leads/${lead.id}`}>
+                  {queueItem.actionLabel}
+                </a>
                 <form action={snoozeLeadAction}>
                   <input type="hidden" name="leadId" value={lead.id} />
-                  <button className="button secondary" type="submit">Snooze 4h</button>
+                  <input type="hidden" name="hours" value="4" />
+                  <button className="button secondary" type="submit">
+                    Snooze 4h
+                  </button>
                 </form>
                 <form action={updateSequenceStatusAction}>
                   <input type="hidden" name="leadId" value={lead.id} />

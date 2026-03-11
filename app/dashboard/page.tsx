@@ -4,8 +4,19 @@ export const revalidate = 30;
 import { getDashboardData } from "@/lib/page-data";
 
 export default async function DashboardPage() {
-  const { totalLeads, replied, unsubscribed, bounced, spam, activeSequences, pausedSequences, recentLeads, recentActivity } =
-    await getDashboardData();
+  const {
+    totalLeads,
+    replied,
+    unsubscribed,
+    bounced,
+    spam,
+    activeSequences,
+    pausedSequences,
+    snoozedLeads,
+    recentLeads,
+    recentActivity,
+    topTags,
+  } = await getDashboardData();
 
   const replyRate = totalLeads ? (replied / totalLeads) * 100 : 0;
   const unsubscribeRate = totalLeads ? (unsubscribed / totalLeads) * 100 : 0;
@@ -158,16 +169,34 @@ export default async function DashboardPage() {
                   <span className="pill">5 min</span>
                 </div>
               </li>
+              <li className="list-item">
+                <div className="split">
+                  <span>Snoozed leads</span>
+                  <span className="pill warning">{snoozedLeads}</span>
+                </div>
+              </li>
             </ul>
           </section>
 
           <section className="panel pad">
-            <h2 className="section-title">Recommended next steps</h2>
-            <ul className="list">
-              <li className="list-item">Review unassigned new leads and route them to agents.</li>
-              <li className="list-item">Check templates before enabling any higher-volume sequence traffic.</li>
-              <li className="list-item">Confirm Vercel production env vars before relying on the deployed instance.</li>
-            </ul>
+            <h2 className="section-title">Tag hotspots</h2>
+            {topTags.length ? (
+              <ul className="list">
+                {topTags.map((tag) => (
+                  <li className="list-item" key={tag.id}>
+                    <div className="split">
+                      <span>{tag.label}</span>
+                      <span className="pill">{tag._count.leads}</span>
+                    </div>
+                    <div className="muted" style={{ marginTop: 8 }}>
+                      {tag.type.replace(/_/g, " ")}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="empty">No tags have been applied yet.</div>
+            )}
           </section>
         </div>
       </section>
